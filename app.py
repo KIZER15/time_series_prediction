@@ -7,25 +7,35 @@ from sklearn.tree import DecisionTreeRegressor
 
 app = Flask(__name__)
 
-# Load model
-model = pickle.load(open("prediction_model.pkl", "rb"))
+# Global caches
+_model = None
+_training_columns = None
+_apy_df = None
 
-# Validate model
-if not isinstance(model, (RandomForestRegressor, DecisionTreeRegressor)):
-    raise TypeError("Loaded model is not a valid RandomForestRegressor or DecisionTreeRegressor.")
+# Lazy-load model
+def get_model():
+    global _model
+    if _model is None:
+        with open("prediction_model.pkl", "rb") as f:
+            _model = pickle.load(f)
+        if not isinstance(_model, (RandomForestRegressor, DecisionTreeRegressor)):
+            raise TypeError("Loaded model is not a valid RandomForestRegressor or DecisionTreeRegressor.")
+    return _model
 
-# Load training columns
-training_columns = list(pd.read_csv("encoded_feature_columns.csv").columns)
+# Lazy-load training columns
+def get_training_columns():
+    global _training_columns
+    if _training_columns is None:
+        _training_columns = list(pd.read_csv("encoded_feature_columns.csv").columns)
+    return _training_columns
 
-# Load APY dataset
-apy_df = pd.read_csv("APY.csv", encoding="utf-8")
-apy_df.rename(columns=lambda x: x.strip(), inplace=True)
-
-# Extract dropdown options
-states = sorted(apy_df['State'].dropna().unique().tolist())
-districts = sorted(apy_df['District'].dropna().unique().tolist())
-crops = sorted(apy_df['Crop'].dropna().unique().tolist())
-seasons = sorted(apy_df['Season'].dropna().unique().tolist())
+# Lazy-load APY data
+def get_apy_df():
+    global _apy_df
+    if _apy_df is None:
+        _apy_df = pd.read_csv("APY.csv", encoding="utf-8")
+        _apy_df.rename(columns=lambda x: x.strip(), inplace=True)
+    return _apy_df
 
 @app.route("/")
 def home():
@@ -39,11 +49,12 @@ def home():
 
 @app.route("/options", methods=["GET"])
 def get_options():
+    df = get_apy_df()
     return jsonify({
-        "states": states,
-        "districts": districts,
-        "crops": crops,
-        "seasons": seasons
+        "states": sorted(df['State'].dropna().unique().tolist()),
+        "districts": sorted(df['District'].dropna().unique().tolist()),
+        "crops": sorted(df['Crop'].dropna().unique().tolist()),
+        "seasons": sorted(df['Season'].dropna().unique().tolist())
     })
 
 @app.route("/predict", methods=["POST"])
@@ -63,7 +74,7 @@ def predict():
         if year < 2000 or year > 2050:
             return jsonify({"error": "Year should be within a reasonable range."}), 400
 
-        # Create input dataframe
+        # Prepare input row
         row = pd.DataFrame({
             'State': [state],
             'District': [district],
@@ -73,7 +84,8 @@ def predict():
             'Area': [area]
         })
 
-        # Encode and align with training columns
+        # Encoding
+        training_columns = get_training_columns()
         row_encoded = pd.get_dummies(row)
         for col in training_columns:
             if col not in row_encoded.columns:
@@ -81,6 +93,7 @@ def predict():
         row_encoded = row_encoded[training_columns]
 
         # Predict
+        model = get_model()
         prediction = model.predict(row_encoded)[0]
         return jsonify({"prediction": round(prediction, 2)})
 
