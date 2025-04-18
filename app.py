@@ -84,12 +84,12 @@ def predict():
             'Area': [area]
         })
 
-        # Encoding
+        # Encoding with pd.concat to avoid fragmentation
         training_columns = get_training_columns()
         row_encoded = pd.get_dummies(row)
-        for col in training_columns:
-            if col not in row_encoded.columns:
-                row_encoded[col] = 0
+        missing_cols = [col for col in training_columns if col not in row_encoded.columns]
+        missing_df = pd.DataFrame(0, index=row_encoded.index, columns=missing_cols)
+        row_encoded = pd.concat([row_encoded, missing_df], axis=1)
         row_encoded = row_encoded[training_columns]
 
         # Predict
@@ -99,6 +99,7 @@ def predict():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
     app.run(debug=True)
