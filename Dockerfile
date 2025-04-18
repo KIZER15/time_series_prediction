@@ -20,8 +20,8 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 # Copy project files
 COPY . .
 
-# Expose port (Gunicorn default is 8000)
+# Expose port
 EXPOSE 8000
 
-# Start the app using Gunicorn
-CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:8000", "app:app"]
+# Start app with Gunicorn (1 worker for low memory)
+CMD ["gunicorn", "-w", "1", "-b", "0.0.0.0:8000", "--timeout", "120", "app:app"]
