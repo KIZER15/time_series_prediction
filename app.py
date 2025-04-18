@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify
 import pandas as pd
 import numpy as np
 import pickle
+import os
+import requests
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
 
@@ -12,10 +14,26 @@ _model = None
 _training_columns = None
 _apy_df = None
 
-# Lazy-load model
+# Google Drive File ID for the model file
+FILE_ID = '1VMQYo9_QdWav5jyyU-DN8YpYfoZiUJRB'
+DOWNLOAD_URL = f"https://drive.google.com/uc?export=download&id={FILE_ID}"
+
+def download_model():
+    """Download the model from Google Drive"""
+    response = requests.get(DOWNLOAD_URL)
+    if response.status_code == 200:
+        with open("prediction_model.pkl", "wb") as f:
+            f.write(response.content)
+    else:
+        raise Exception("Failed to download the model from Google Drive.")
+
 def get_model():
+    """Lazy-load model"""
     global _model
     if _model is None:
+        # Check if the model is already cached locally
+        if not os.path.exists("prediction_model.pkl"):
+            download_model()  # Download if not available locally
         with open("prediction_model.pkl", "rb") as f:
             _model = pickle.load(f)
         if not isinstance(_model, (RandomForestRegressor, DecisionTreeRegressor)):
